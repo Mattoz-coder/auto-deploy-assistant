@@ -8,3 +8,4 @@ python-dotenv==1.0.0
 "Bug fix" 
 "Adding new documentation section" 
 "Applying bug fix" 
+"Update project documentation" 
