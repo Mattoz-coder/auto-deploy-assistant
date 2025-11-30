@@ -78,7 +78,6 @@ jobs:
         retention-days: 30
 
 env:
-  # Add your environment variables here
-  # OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-  # ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  env:
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   NODE_ENV: production
