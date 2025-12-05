@@ -23,7 +23,7 @@ jobs:
       run: |
         pip install -r requirements.txt
     
-    - name: Check routes (Python script)
+    - name: Check routes
       id: route_check
       run: |
         python route_checker.py sample_app.py > route_check_result.json || true
@@ -34,19 +34,21 @@ jobs:
       run: |
         echo "Running tests..."
         # Add your test commands here
-        # python -m pytest tests/ || true
     
     - name: Build application
       run: |
         echo "Building application..."
         # Add your build commands here
     
-    - name: Analyze errors if build failed
+    - name: Generate AI error analysis
       if: failure()
       run: |
-        echo "Build failed - analyzing errors"
-        python error_analyzer.py "${{ job.status }}" > error_analysis.json || true
-        cat error_analysis.json
+        echo "Build failed - generating AI analysis..."
+        ERROR_MSG="Build failed in GitHub Actions workflow. Repository: ${{ github.repository }}, Run ID: ${{ github.run_id }}, Commit: ${{ github.sha }}"
+        python error_analyzer.py "$ERROR_MSG" > ai_suggestions.json || echo '{"error": "AI analysis failed"}' > ai_suggestions.json
+        echo "=== AI ANALYSIS COMPLETE ==="
+        cat ai_suggestions.json
+      continue-on-error: true
     
     - name: Deploy to production
       if: success()
@@ -54,14 +56,14 @@ jobs:
         echo "Deploying to production..."
         # Add your deployment commands here
     
-    - name: Upload build artifacts
+    - name: Upload artifacts
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: build-results
+        name: build-results-${{ github.run_number }}
         path: |
           route_check_result.json
-          error_analysis.json
+          ai_suggestions.json
         retention-days: 30
 
 env:
