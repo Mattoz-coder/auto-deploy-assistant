@@ -1,0 +1,35 @@
+{
+  "success": true,
+  "timestamp": "2025-12-05T11:00:00",
+  "error_info": {
+    "error_type": "SyntaxError",
+    "message": "invalid syntax at line 45 in app.py"
+  },
+  "ai_provider": "google-gemini",
+  "ai_suggestions": {
+    "root_cause": "Missing colon after function definition. Python requires a colon ':' at the end of function declarations, class definitions, and control flow statements.",
+    "solutions": [
+      {
+        "option": 1,
+        "title": "Add the missing colon",
+        "description": "Add a colon at the end of the function definition on line 44",
+        "code_example": "def process_data():\n    result = perform_calculation()\n    return result"
+      },
+      {
+        "option": 2,
+        "title": "Check for cascading syntax errors",
+        "description": "Verify that all preceding lines have correct syntax, as errors often cascade",
+        "code_example": "# Common syntax requirements:\nif condition:\n    action()\n\nfor item in items:\n    process(item)\n\nclass MyClass:\n    pass"
+      },
+      {
+        "option": 3,
+        "title": "Use automated linting",
+        "description": "Run pylint or flake8 to catch syntax errors before committing code",
+        "code_example": "# Install linter\npip install pylint\n\n# Run on your file\npylint app.py\n\n# Or use in VS Code\n# Install Python extension and enable linting"
+      }
+    ],
+    "confidence": "high",
+    "estimated_fix_time": "1-2 minutes"
+  },
+  "fallback_used": false
+}

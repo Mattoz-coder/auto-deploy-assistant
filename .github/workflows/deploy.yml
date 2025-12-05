@@ -33,18 +33,16 @@ jobs:
     - name: Run tests
       run: |
         echo "Running tests..."
-        # Add your test commands here
     
     - name: Build application
       run: |
         echo "Building application..."
-        # Add your build commands here
     
     - name: Generate AI error analysis
       if: failure()
       run: |
         echo "Build failed - generating AI analysis..."
-        ERROR_MSG="Build failed in GitHub Actions workflow. Repository: ${{ github.repository }}, Run ID: ${{ github.run_id }}, Commit: ${{ github.sha }}"
+        ERROR_MSG="Build failed in GitHub Actions. Check logs at https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
         python error_analyzer.py "$ERROR_MSG" > ai_suggestions.json || echo '{"error": "AI analysis failed"}' > ai_suggestions.json
         echo "=== AI ANALYSIS COMPLETE ==="
         cat ai_suggestions.json
@@ -54,7 +52,6 @@ jobs:
       if: success()
       run: |
         echo "Deploying to production..."
-        # Add your deployment commands here
     
     - name: Upload artifacts
       if: always()
@@ -67,5 +64,5 @@ jobs:
         retention-days: 30
 
 env:
-  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
   NODE_ENV: production

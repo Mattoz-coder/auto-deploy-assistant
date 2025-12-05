@@ -1,264 +1,131 @@
 #!/usr/bin/env python3
 """
-Error Analyzer Script
-Uses LLM to analyze build errors and generate fix suggestions
+AI-Powered Error Analysis using FREE Google Gemini
 """
 
 import os
 import sys
 import json
-import re
 from datetime import datetime
 
-# Check if OpenAI library is available
-try:
-    import openai
-    OPENAI_AVAILABLE = True
-except ImportError:
-    OPENAI_AVAILABLE = False
-    print("Warning: openai library not installed. Install with: pip install openai", file=sys.stderr)
-
-# Alternative: Anthropic Claude
-try:
-    import anthropic
-    ANTHROPIC_AVAILABLE = True
-except ImportError:
-    ANTHROPIC_AVAILABLE = False
-
-def extract_code_context(file_path, line_number, context_lines=5):
-    """Extract code snippet around the error location"""
+def analyze_error_with_gemini(error_message):
+    """Analyze error using FREE Google Gemini API"""
     try:
-        with open(file_path, 'r') as f:
-            lines = f.readlines()
+        import requests
         
-        start = max(0, line_number - context_lines - 1)
-        end = min(len(lines), line_number + context_lines)
+        api_key = os.getenv('GEMINI_API_KEY')
+        if not api_key:
+            return None
         
-        code_snippet = ''.join(lines[start:end])
-        return {
-            'code': code_snippet,
-            'start_line': start + 1,
-            'end_line': end,
-            'error_line': line_number
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={api_key}"
+        
+        prompt = f"""Analyze this programming error and provide fix suggestions in JSON format:
+
+Error: {error_message}
+
+Respond with ONLY valid JSON (no markdown, no code blocks):
+{{
+  "root_cause": "brief explanation",
+  "solutions": [
+    {{
+      "option": 1,
+      "title": "solution title",
+      "description": "detailed explanation",
+      "code_example": "code snippet"
+    }}
+  ]
+}}"""
+
+        data = {
+            "contents": [{
+                "parts": [{"text": prompt}]
+            }]
         }
-    except Exception as e:
-        return {
-            'code': '',
-            'error': f'Could not extract code: {str(e)}'
-        }
-
-def parse_error_log(error_log):
-    """Parse error log to extract key information"""
-    # Common error patterns
-    python_error = re.search(r'File "(.+?)", line (\d+)', error_log)
-    js_error = re.search(r'at (.+?):(\d+):(\d+)', error_log)
-    
-    error_info = {
-        'error_type': 'Unknown',
-        'file_path': None,
-        'line_number': None,
-        'message': error_log
-    }
-    
-    # Extract error type
-    if 'SyntaxError' in error_log:
-        error_info['error_type'] = 'SyntaxError'
-    elif 'TypeError' in error_log:
-        error_info['error_type'] = 'TypeError'
-    elif 'ImportError' in error_log or 'ModuleNotFoundError' in error_log:
-        error_info['error_type'] = 'ImportError'
-    elif 'NameError' in error_log:
-        error_info['error_type'] = 'NameError'
-    elif 'AttributeError' in error_log:
-        error_info['error_type'] = 'AttributeError'
-    
-    # Extract file and line for Python
-    if python_error:
-        error_info['file_path'] = python_error.group(1)
-        error_info['line_number'] = int(python_error.group(2))
-    
-    # Extract file and line for JavaScript
-    elif js_error:
-        error_info['file_path'] = js_error.group(1)
-        error_info['line_number'] = int(js_error.group(2))
-    
-    return error_info
-
-def analyze_with_openai(error_log, code_snippet):
-    """Use OpenAI to analyze error and generate suggestions"""
-    if not OPENAI_AVAILABLE:
-        return "OpenAI library not available"
-    
-    api_key = os.getenv('OPENAI_API_KEY')
-    if not api_key:
-        return "OPENAI_API_KEY environment variable not set"
-    
-    from openai import OpenAI
-    client = OpenAI(api_key=api_key)
-    
-    prompt = f"""Analyze this build error and provide actionable fix suggestions:
-
-ERROR LOG:
-{error_log}
-
-CODE SNIPPET:
-{code_snippet}
-
-Please provide:
-1. Root cause of the error
-2. Specific fix suggestions (2-3 options)
-3. Code example of the fix if applicable
-
-Keep suggestions concise and actionable."""
-
-    try:
-        response = client.chat.completions.create(
-            model='gpt-4o-mini',
-            messages=[
-                {'role': 'system', 'content': 'You are a helpful coding assistant that analyzes errors and suggests fixes.'},
-                {'role': 'user', 'content': prompt}
-            ],
-            temperature=0.7,
-            max_tokens=500
-        )
         
-        return response.choices[0].message.content
-    except Exception as e:
-        return f"Error calling OpenAI API: {str(e)}"
-
-def analyze_with_anthropic(error_log, code_snippet):
-    """Use Anthropic Claude to analyze error and generate suggestions"""
-    if not ANTHROPIC_AVAILABLE:
-        return "Anthropic library not available"
-    
-    api_key = os.getenv('ANTHROPIC_API_KEY')
-    if not api_key:
-        return "ANTHROPIC_API_KEY environment variable not set"
-    
-    client = anthropic.Anthropic(api_key=api_key)
-    
-    prompt = f"""Analyze this build error and provide actionable fix suggestions:
-
-ERROR LOG:
-{error_log}
-
-CODE SNIPPET:
-{code_snippet}
-
-Please provide:
-1. Root cause of the error
-2. Specific fix suggestions (2-3 options)
-3. Code example of the fix if applicable
-
-Keep suggestions concise and actionable."""
-
-    try:
-        message = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
-            max_tokens=500,
-            messages=[
-                {"role": "user", "content": prompt}
-            ]
-        )
+        response = requests.post(url, json=data, timeout=30)
         
-        return message.content[0].text
+        if response.status_code == 200:
+            result = response.json()
+            ai_text = result['candidates'][0]['content']['parts'][0]['text']
+            
+            # Clean up response
+            ai_text = ai_text.strip()
+            if '```json' in ai_text:
+                ai_text = ai_text.split('```json')[1].split('```')[0]
+            elif '```' in ai_text:
+                ai_text = ai_text.split('```')[1].split('```')[0]
+            
+            try:
+                return json.loads(ai_text.strip())
+            except:
+                return {"analysis": ai_text}
+        else:
+            return None
+            
     except Exception as e:
-        return f"Error calling Anthropic API: {str(e)}"
+        print(f"Gemini API error: {e}", file=sys.stderr)
+        return None
 
-def generate_fallback_suggestions(error_info):
-    """Generate basic suggestions without AI"""
-    error_type = error_info.get('error_type', 'Unknown')
+def get_fallback_suggestions(error_type):
+    """Provide fallback suggestions when AI is unavailable"""
     
-    suggestions = {
-        'SyntaxError': [
-            'Check for missing parentheses, brackets, or quotes',
-            'Verify proper indentation (especially in Python)',
-            'Look for unclosed code blocks'
+    common_suggestions = {
+        "SyntaxError": [
+            "Check for missing parentheses, brackets, or quotes",
+            "Verify proper indentation",
+            "Look for unclosed code blocks or missing colons"
         ],
-        'ImportError': [
-            'Verify the module is installed: pip install <module>',
-            'Check if the import path is correct',
-            'Ensure the module is in your requirements.txt'
+        "ImportError": [
+            "Verify the module is installed: pip install <module_name>",
+            "Check if the module name is spelled correctly",
+            "Ensure the module is in your Python path"
         ],
-        'TypeError': [
-            'Check if you\'re passing the correct data types',
-            'Verify function arguments match expected types',
-            'Review type conversions (str, int, float, etc.)'
+        "NameError": [
+            "Check if the variable is defined before use",
+            "Verify the variable name spelling",
+            "Ensure the variable is in the correct scope"
         ],
-        'NameError': [
-            'Check if the variable is defined before use',
-            'Verify correct spelling of variable names',
-            'Ensure variable is in correct scope'
-        ],
-        'AttributeError': [
-            'Verify the object has the attribute you\'re accessing',
-            'Check if object is None before accessing attributes',
-            'Review the object\'s available methods and properties'
+        "default": [
+            "Read the error message carefully",
+            "Check the line number mentioned",
+            "Review recent code changes",
+            "Search for the error online"
         ]
     }
     
-    return suggestions.get(error_type, [
-        'Review the error message carefully',
-        'Check the documentation for the failing component',
-        'Try searching for similar errors online'
-    ])
+    return common_suggestions.get(error_type, common_suggestions["default"])
 
-def main():
-    # Get error log from command line or stdin
-    if len(sys.argv) > 1:
-        error_log = sys.argv[1]
-    else:
-        error_log = sys.stdin.read()
+def analyze_error(error_message):
+    """Main function to analyze errors"""
     
-    if not error_log.strip():
-        print(json.dumps({
-            'success': False,
-            'error': 'No error log provided'
-        }))
-        sys.exit(1)
+    error_type = error_message.split(':')[0].strip() if ':' in error_message else "Unknown"
     
-    # Parse error information
-    error_info = parse_error_log(error_log)
-    
-    # Extract code context if file path is available
-    code_context = None
-    if error_info['file_path'] and error_info['line_number']:
-        code_context = extract_code_context(
-            error_info['file_path'],
-            error_info['line_number']
-        )
-    
-    # Generate AI suggestions
-    ai_suggestions = None
-    if OPENAI_AVAILABLE and os.getenv('OPENAI_API_KEY'):
-        ai_suggestions = analyze_with_openai(
-            error_log,
-            code_context['code'] if code_context else ''
-        )
-    elif ANTHROPIC_AVAILABLE and os.getenv('ANTHROPIC_API_KEY'):
-        ai_suggestions = analyze_with_anthropic(
-            error_log,
-            code_context['code'] if code_context else ''
-        )
-    
-    # Generate fallback suggestions
-    fallback_suggestions = generate_fallback_suggestions(error_info)
-    
-    # Build result
     result = {
-        'success': True,
-        'timestamp': datetime.now().isoformat(),
-        'error_info': error_info,
-        'code_context': code_context,
-        'ai_suggestions': ai_suggestions,
-        'fallback_suggestions': fallback_suggestions,
-        'ai_provider': 'openai' if OPENAI_AVAILABLE and os.getenv('OPENAI_API_KEY') 
-                      else 'anthropic' if ANTHROPIC_AVAILABLE and os.getenv('ANTHROPIC_API_KEY')
-                      else 'none'
+        "success": True,
+        "timestamp": datetime.now().isoformat(),
+        "error_info": {
+            "error_type": error_type,
+            "message": error_message
+        },
+        "ai_provider": "google-gemini"
     }
     
-    # Output JSON result
-    print(json.dumps(result, indent=2))
+    ai_suggestions = analyze_error_with_gemini(error_message)
+    
+    if ai_suggestions:
+        result["ai_suggestions"] = ai_suggestions
+        result["fallback_used"] = False
+    else:
+        result["ai_suggestions"] = "AI unavailable"
+        result["fallback_suggestions"] = get_fallback_suggestions(error_type)
+        result["fallback_used"] = True
+    
+    return result
 
 if __name__ == '__main__':
-    main()
+    if len(sys.argv) < 2:
+        print("Usage: python error_analyzer.py \"error message\"")
+        sys.exit(1)
+    
+    result = analyze_error(sys.argv[1])
+    print(json.dumps(result, indent=2))
