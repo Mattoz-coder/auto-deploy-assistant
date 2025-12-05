@@ -2,7 +2,7 @@ name: Auto-Deploy with Build Tracking
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main ]
   pull_request:
     branches: [ main ]
 
@@ -14,27 +14,14 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       
-    - name: Set up Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '18'
-        
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.9'
+        python-version: '3.11'
     
     - name: Install dependencies
       run: |
         pip install -r requirements.txt
-    
-    - name: Run tests
-      run: |
-        echo "Running tests..."
-    
-    - name: Build application
-      run: |
-        echo "Building application..."
     
     - name: Check routes (Python script)
       id: route_check
@@ -42,6 +29,17 @@ jobs:
         python route_checker.py sample_app.py > route_check_result.json || true
         cat route_check_result.json
       continue-on-error: true
+    
+    - name: Run tests
+      run: |
+        echo "Running tests..."
+        # Add your test commands here
+        # python -m pytest tests/ || true
+    
+    - name: Build application
+      run: |
+        echo "Building application..."
+        # Add your build commands here
     
     - name: Analyze errors if build failed
       if: failure()
@@ -54,6 +52,7 @@ jobs:
       if: success()
       run: |
         echo "Deploying to production..."
+        # Add your deployment commands here
     
     - name: Upload build artifacts
       if: always()
@@ -64,24 +63,6 @@ jobs:
           route_check_result.json
           error_analysis.json
         retention-days: 30
-
-    - name: Update Airtable - Success
-      if: success()
-      run: |
-        python update_airtable_status.py "Success" "${{ github.sha }}"
-      env:
-        AIRTABLE_API_KEY: ${{ secrets.AIRTABLE_API_KEY }}
-        AIRTABLE_BASE_ID: ${{ secrets.AIRTABLE_BASE_ID }}
-        AIRTABLE_DEPLOYMENTS_TABLE_ID: ${{ secrets.AIRTABLE_DEPLOYMENTS_TABLE_ID }}
-    
-    - name: Update Airtable - Failed
-      if: failure()
-      run: |
-        python update_airtable_status.py "Failed" "${{ github.sha }}"
-      env:
-        AIRTABLE_API_KEY: ${{ secrets.AIRTABLE_API_KEY }}
-        AIRTABLE_BASE_ID: ${{ secrets.AIRTABLE_BASE_ID }}
-        AIRTABLE_DEPLOYMENTS_TABLE_ID: ${{ secrets.AIRTABLE_DEPLOYMENTS_TABLE_ID }}
 
 env:
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
