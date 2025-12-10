@@ -5,8 +5,65 @@ Update Airtable Deployment Status after GitHub Actions completes
 
 import os
 import sys
+import time
 from pyairtable import Api
-from datetime import datetime, timedelta
+from datetime import datetime
+
+def find_deployment_record(table, commit_sha, max_attempts=6, wait_seconds=10):
+    """
+    Find the deployment record, with retries to wait for Zapier
+    
+    Args:
+        table: Airtable table object
+        commit_sha: Commit SHA to match
+        max_attempts: Number of retry attempts
+        wait_seconds: Seconds to wait between attempts
+    """
+    
+    short_sha = commit_sha[:7]
+    
+    for attempt in range(1, max_attempts + 1):
+        print(f"Attempt {attempt}/{max_attempts}: Looking for commit {short_sha}...")
+        
+        # Get all records
+        all_records = table.all()
+        
+        if not all_records:
+            print("  No records found")
+            if attempt < max_attempts:
+                print(f"  Waiting {wait_seconds} seconds for Zapier...")
+                time.sleep(wait_seconds)
+                continue
+            return None
+        
+        # Sort by created time (most recent first)
+        sorted_records = sorted(
+            all_records,
+            key=lambda x: x['createdTime'],
+            reverse=True
+        )
+        
+        # Look for matching SHA in recent records
+        for record in sorted_records[:10]:  # Check last 10 records
+            fields = record['fields']
+            record_sha = fields.get('Commit SHA', '')
+            
+            # Match full SHA or short SHA
+            if record_sha == commit_sha or record_sha == short_sha or commit_sha.startswith(record_sha):
+                print(f"  Found matching record: {record['id']}")
+                print(f"  Commit SHA in Airtable: {record_sha}")
+                return record
+        
+        # No match found, wait and retry
+        if attempt < max_attempts:
+            print(f"  No matching record found yet")
+            print(f"  Most recent commit SHA in Airtable: {sorted_records[0]['fields'].get('Commit SHA', 'none')}")
+            print(f"  Waiting {wait_seconds} seconds for Zapier...")
+            time.sleep(wait_seconds)
+    
+    print("WARNING: Could not find matching record after all attempts")
+    return None
+
 
 def update_deployment_status(status, commit_sha):
     """
@@ -23,9 +80,6 @@ def update_deployment_status(status, commit_sha):
     
     if not all([api_key, base_id, table_id]):
         print("ERROR: Missing Airtable credentials")
-        print(f"API Key present: {bool(api_key)}")
-        print(f"Base ID present: {bool(base_id)}")
-        print(f"Table ID present: {bool(table_id)}")
         return False
     
     try:
@@ -33,50 +87,19 @@ def update_deployment_status(status, commit_sha):
         api = Api(api_key)
         table = api.table(base_id, table_id)
         
-        # Get recent records (last 10 minutes)
-        # We look for the most recent record since Zapier just created it
-        all_records = table.all()
+        # Find the record with retries
+        target_record = find_deployment_record(table, commit_sha)
         
-        if not all_records:
-            print("WARNING: No records found in Airtable")
+        if not target_record:
+            print("ERROR: Could not find deployment record")
             return False
         
-        # Sort by created time (most recent first)
-        sorted_records = sorted(
-            all_records, 
-            key=lambda x: x['createdTime'], 
-            reverse=True
-        )
-        
-        # Find record matching commit SHA or use most recent
-        target_record = None
-        
-        # First try to find exact match by Commit SHA
-        for record in sorted_records[:5]:  # Check last 5 records
-            fields = record['fields']
-            record_sha = fields.get('Commit SHA', '')
-            
-            # Match full SHA or short SHA (first 7 chars)
-            if record_sha == commit_sha or record_sha == commit_sha[:7]:
-                target_record = record
-                print(f"Found record by SHA match: {record['id']}")
-                break
-        
-        # If no SHA match, use the most recent record (likely just created by Zapier)
-        if not target_record:
-            target_record = sorted_records[0]
-            print(f"Using most recent record: {target_record['id']}")
-        
-        # Update the record with build status
+        # Update the record
         record_id = target_record['id']
         
-        updated_fields = {
-            'Build Status': status
-        }
+        table.update(record_id, {'Build Status': status})
         
-        table.update(record_id, updated_fields)
-        
-        print(f"✓ Successfully updated deployment status to: {status}")
+        print(f"\n✓ Successfully updated deployment status to: {status}")
         print(f"  Record ID: {record_id}")
         print(f"  Commit SHA: {commit_sha[:7]}")
         
@@ -92,18 +115,14 @@ def update_deployment_status(status, commit_sha):
 if __name__ == '__main__':
     if len(sys.argv) < 3:
         print("Usage: python update_deployment_status.py <status> <commit_sha>")
-        print("\nExample:")
-        print('  python update_deployment_status.py "Success" "abc123def456"')
         sys.exit(1)
     
-    status = sys.argv[1]  # "Success" or "Failed"
+    status = sys.argv[1]
     commit_sha = sys.argv[2]
     
-    # Validate status
     if status not in ["Success", "Failed"]:
-        print(f"ERROR: Invalid status '{status}'. Must be 'Success' or 'Failed'")
+        print(f"ERROR: Invalid status '{status}'")
         sys.exit(1)
     
     success = update_deployment_status(status, commit_sha)
-    
     sys.exit(0 if success else 1)
