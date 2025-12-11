@@ -58,6 +58,16 @@ jobs:
         GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
       continue-on-error: true
     
+    - name: Save error to history
+      if: failure()
+      run: |
+        python add_error_to_history.py "BuildFailure" "Build failed in GitHub Actions" ai_suggestions.json "${{ github.actor }}" "workflow"
+      env:
+        AIRTABLE_API_KEY: ${{ secrets.AIRTABLE_API_KEY }}
+        AIRTABLE_BASE_ID: ${{ secrets.AIRTABLE_BASE_ID }}
+        AIRTABLE_ERRORS_TABLE_ID: ${{ secrets.AIRTABLE_ERRORS_TABLE_ID }}
+      continue-on-error: true
+    
     - name: Deploy to production
       if: success()
       run: |
